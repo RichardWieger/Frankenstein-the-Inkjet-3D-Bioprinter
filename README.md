@@ -1,4 +1,4 @@
-Frankenstein the Inkjet 3D Bioprinter combines a modified Creality Ender 3 3D printer with an inkjet printer's print cartridges, X-axis, control board, and paper feed mechanism to enable 3D inkjet printing.
+Frankenstein the 3D Inkjet Bioprinter combines a modified Creality Ender 3 3D printer with an inkjet printer's print cartridges, X-axis, control board, and paper feed mechanism to enable 3D inkjet printing.
 
 Frankenstein is the first prototype on my journey to create an open source 3D inkjet printer and software stack. I envision creating a company to sell the hardware, develop the software, and pay the bills for the open source project.
 I believe the project needs to be open source in order to facilitate the biological and medical research that could be done on such a platform.
