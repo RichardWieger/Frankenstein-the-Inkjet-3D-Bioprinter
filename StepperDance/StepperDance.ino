@@ -5,6 +5,9 @@
 #define EncoderPinB 3
 #define ButtonPin 4
 #define ServoPin 9
+#define stepPin 6
+#define dirPin 5
+#define limitSwitchPin 8
 
 // Constants
 const unsigned long BAUD_RATE = 115200;
@@ -20,10 +23,6 @@ const int SMALL_ROLL_INS_THRESHOLD = 48;  // New constant for small roll-ins
 volatile int netEncoderClicks = 0;
 const int clickPerPaper = 373;
 
-// New pin definitions for stepper motor
-#define stepPin 6
-#define dirPin 5
-#define limitSwitchPin 8
 
 // Enum for printer modes
 enum PrinterMode {
@@ -64,10 +63,6 @@ void setup() {
 void loop() {
   ButtonState = digitalRead(ButtonPin);
  
-  if (!SEEKING_PAPER_FEED) {
-    SwitchServo.write(0);
-  }
- 
   if (ButtonState == HIGH) {
     SEEKING_PAPER_FEED = !SEEKING_PAPER_FEED;
     SEEKING_Y_INCREMENT = false;
@@ -106,13 +101,14 @@ void loop() {
     Serial.println(EncoderClicks);
     Serial.print("netEncoderClicks: ");
     Serial.println(netEncoderClicks);
-    if (EncoderClicks >= SMALL_ROLL_INS_THRESHOLD) {
+    if (abs(EncoderClicks) >= SMALL_ROLL_INS_THRESHOLD) {
       Serial.println("Main print phase");
       if (SEEKING_PAPER_FEED && !SEEKING_Y_INCREMENT && IS_MOVING) {
         SwitchServo.write(SERVO_RANGE);
-        netEncoderClicks = 0;
+        Serial.println("servo opened");
         SEEKING_Y_INCREMENT = true;
         MOVE_SENT = true;
+        SEEKING_PAPER_FEED = false;
       } else if (SEEKING_Y_INCREMENT && IS_MOVING && !MOVE_SENT) {
         moveYAxis(Y_AXIS_STEPS);
         Serial.print("Moved Y-axis ");
@@ -121,8 +117,15 @@ void loop() {
         MOVE_SENT = true;
       }
     }
-    if(netEncoderClicks >= clickPerPaper){
+    if(netEncoderClicks >= (clickPerPaper + SMALL_ROLL_INS_THRESHOLD)){
       closePaperFeedSensor();
+    }
+    /*if(netEncoderClicks << SMALL_ROLL_INS_THRESHOLD){ //commented out to test a problem
+      closePaperFeedSensor();
+      SEEKING_PAPER_FEED = false;
+    }*/
+    if(netEncoderClicks <= -1){
+      netEncoderClicks = 0;
     }
   }
 
@@ -141,6 +144,7 @@ void handleSerialInput(char input) {
     case 'c':
       currentMode = COLOR;
       EncoderClicks = 0;  // Reset EncoderClicks at the start of a new print job
+      netEncoderClicks = 0;
       Serial.println("Initializing color mode");
       closePaperFeedSensor();
       SEEKING_PAPER_FEED = true;
@@ -152,6 +156,7 @@ void handleSerialInput(char input) {
     case 'm':
       currentMode = MONOCHROME;
       EncoderClicks = 0;  // Reset EncoderClicks at the start of a new print job
+      netEncoderClicks = 0;
       Serial.println("Initializing monochrome mode");
       closePaperFeedSensor();
       SEEKING_PAPER_FEED = true;
