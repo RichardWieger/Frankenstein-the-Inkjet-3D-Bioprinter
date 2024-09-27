@@ -1,13 +1,13 @@
 #include <Servo.h>
 
-// Existing pin definitions
-#define EncoderPinA 2
-#define EncoderPinB 3
-#define ButtonPin 4
-#define ServoPin 9
-#define stepPin 6
-#define dirPin 5
-#define limitSwitchPin 8
+// Pin Definitions
+#define EncoderPinA 2        
+#define EncoderPinB 3        
+#define ButtonPin 4          
+#define dirPin 5             // Digital pin for Y stepper motor direction control
+#define stepPin 6            // Digital pin for Y stepper motor step control
+#define limitSwitchPin 8     // Digital pin for Y limit switch input
+#define ServoPin 9           
 
 // Constants
 const unsigned long BAUD_RATE = 115200;
@@ -19,7 +19,7 @@ const int HOMING_SPEED = 1000;  // Microseconds between steps (lower = faster)
 const int SERVO_RANGE = 180;
 const int BACKOFF_STEPS = 450;  // Steps to accommodate reduced build area
 const unsigned long HOMING_DIRECTION_CHANGE_DELAY = 50;  // Milliseconds
-const int SMALL_ROLL_INS_THRESHOLD = 48;  // New constant for small roll-ins
+const int SMALL_ROLL_INS_THRESHOLD = 10;  // New constant for small roll-ins
 volatile int clicksSinceEdge = 0;
 const int clicksPerPaper = 373;
 
@@ -41,6 +41,7 @@ volatile int EncoderClicks = 0;
 unsigned long ThisClick = 0;
 unsigned long ClickInterval = 0;
 volatile long currentYPosition = 0;
+volatile boolean EncoderClicksDecreased = false; // Track direction of paper feed mechanism to determine new page roll-in.
 boolean IS_MOVING = false;
 boolean MOVE_SENT = false;
 PrinterMode currentMode = IDLE;
@@ -53,6 +54,7 @@ void setup() {
   pinMode(ButtonPin, INPUT);
   attachInterrupt(digitalPinToInterrupt(EncoderPinA), EncoderRotated, CHANGE);
 
+  // Setup Y-axis stepper motor and limit switch
   pinMode(stepPin, OUTPUT);
   pinMode(dirPin, OUTPUT);
   pinMode(limitSwitchPin, INPUT_PULLUP);
@@ -88,9 +90,11 @@ void loop() {
     if (StateA != StateB) {
       EncoderClicks++;  
       clicksSinceEdge++;
+      EncoderClicksDecreased = false;
     } else {
       EncoderClicks--;  
       clicksSinceEdge--;
+      EncoderClicksDecreased = true;
     }
     RotationDetected = false;
     interrupts();
@@ -98,15 +102,17 @@ void loop() {
     IS_MOVING = true;
     ThisClick = millis();
    
-    //Serial.print("EncoderClicks: ");
-    //Serial.println(EncoderClicks);
-    //Serial.print("clicksSinceEdge: ");
-    //Serial.println(clicksSinceEdge);
+    Serial.print("EncoderClicks: ");
+    Serial.println(EncoderClicks);
+    Serial.print("clicksSinceEdge: ");
+    Serial.println(clicksSinceEdge);
     //Serial.print("MOVE_SENT: ");
     //Serial.println(MOVE_SENT);
     //Serial.print("IS_MOVING: ");
     //Serial.println(IS_MOVING);
     if (abs(EncoderClicks) >= SMALL_ROLL_INS_THRESHOLD) {
+      //Serial.print("EncoderClicksDecreased: ");
+      //Serial.println(EncoderClicksDecreased);
       //Serial.println("Main print phase");  //Can help with debugging sometimes
       EncoderClicks = abs(EncoderClicks);
       if (SEEKING_PAPER_FEED && IS_MOVING) { //Removed unnecessary SEEKING_Y_INCREMENT logic, improves readability
@@ -123,9 +129,6 @@ void loop() {
         MOVE_SENT = true;
       }
     }
-    if(clicksSinceEdge >= clicksPerPaper){
-      closePaperFeedSensor();
-    }
     //This logic may not be needed. It would only be helpful if the paper moves back an forth across the sensor.
     /*if(clicksSinceEdge << SMALL_ROLL_INS_THRESHOLD){ 
       closePaperFeedSensor();
@@ -141,17 +144,18 @@ void loop() {
       MOVE_SENT = false;
     }
   }
+
   if(clicksSinceEdge >= clicksPerPaper){
-    if(!IS_MOVING){
-      EncoderClicks = 0;  // Reset EncoderClicks at the start of a new print job
-      clicksSinceEdge = 0;
-      Serial.println("Initializing for new page");
-      closePaperFeedSensor();
-      SEEKING_PAPER_FEED = true;
-      Serial.println("Awaiting new page, resetting Y-axis...");
-      moveYAxis(-currentYPosition);
-      Serial.println("Y-axis reset for new page.");
-    }
+    closePaperFeedSensor();
+    //if(!IS_MOVING || EncoderClicksDecreased){
+    EncoderClicks = 0;  // Reset EncoderClicks at the start of a new print job
+    clicksSinceEdge = 0;
+    Serial.println("Initializing for new page");
+    SEEKING_PAPER_FEED = true;
+    Serial.println("Awaiting new page, resetting Y-axis...");
+    moveYAxis(-currentYPosition);
+    Serial.println("Y-axis reset for new page.");
+    //}
   }
 }
 
@@ -225,21 +229,27 @@ void homeYAxis() {
 void moveYAxis(int steps) {
   if (steps > 0) {
     digitalWrite(dirPin, LOW);  // Set direction for positive steps
+    for (int i = 0; i < steps; i++) {
+      digitalWrite(stepPin, HIGH);
+      delayMicroseconds(HOMING_SPEED);
+      digitalWrite(stepPin, LOW);
+      delayMicroseconds(HOMING_SPEED);
+    }
+    currentYPosition += steps;  // Update current Y position
   } else if (steps < 0) {
     digitalWrite(dirPin, HIGH);  // Set direction for negative steps
     steps = -steps;  // Convert negative steps to positive value
+    for (int i = 0; i < steps; i++) {
+      digitalWrite(stepPin, HIGH);
+      delayMicroseconds(HOMING_SPEED);
+      digitalWrite(stepPin, LOW);
+      delayMicroseconds(HOMING_SPEED);
+    }
+    currentYPosition -= steps;  // Update current Y position
   } else {
     return;  // If steps is zero, no movement is needed.
   }
-  
-  for (int i = 0; i < steps; i++) {
-    digitalWrite(stepPin, HIGH);
-    delayMicroseconds(HOMING_SPEED);
-    digitalWrite(stepPin, LOW);
-    delayMicroseconds(HOMING_SPEED);
-  }
-  
-  currentYPosition += steps;  // Update current Y position
   Serial.print("currentYPosition: ");
   Serial.println(currentYPosition);
+  
 }
