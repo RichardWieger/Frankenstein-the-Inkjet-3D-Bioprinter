@@ -11,7 +11,8 @@
 
 // Constants
 const unsigned long BAUD_RATE = 115200;
-const int Y_AXIS_STEPS = 34;  // Steps for 6.8mm movement
+const int Y_AXIS_STEPS = 34;  // Steps for 6.8mm movement for color cartridge
+const int Y_AXIS_STEPS_M = 72;  // Steps for 14.4mm movement for monochrome cartridge
 const float MM_PER_STEP = 0.2;  // Millimeters per step
 const unsigned long DEBOUNCE_DELAY = 300;  // Milliseconds
 const unsigned long SMOOTH_WINDOW = 100;  // Milliseconds
@@ -21,7 +22,7 @@ const int BACKOFF_STEPS = 450;  // Steps to accommodate reduced build area
 const unsigned long HOMING_DIRECTION_CHANGE_DELAY = 50;  // Milliseconds
 const int SMALL_ROLL_INS_THRESHOLD = 10;  // New constant for small roll-ins
 volatile int clicksSinceEdge = 0;
-const int clicksPerPaper = 373;
+const int clicksPerPaper = 350;
 
 
 // Enum for printer modes
@@ -106,14 +107,7 @@ void loop() {
     Serial.println(EncoderClicks);
     Serial.print("clicksSinceEdge: ");
     Serial.println(clicksSinceEdge);
-    //Serial.print("MOVE_SENT: ");
-    //Serial.println(MOVE_SENT);
-    //Serial.print("IS_MOVING: ");
-    //Serial.println(IS_MOVING);
     if (abs(EncoderClicks) >= SMALL_ROLL_INS_THRESHOLD) {
-      //Serial.print("EncoderClicksDecreased: ");
-      //Serial.println(EncoderClicksDecreased);
-      //Serial.println("Main print phase");  //Can help with debugging sometimes
       EncoderClicks = abs(EncoderClicks);
       if (SEEKING_PAPER_FEED && IS_MOVING) { //Removed unnecessary SEEKING_Y_INCREMENT logic, improves readability
         SwitchServo.write(SERVO_RANGE);
@@ -122,18 +116,21 @@ void loop() {
         MOVE_SENT = true; 
         SEEKING_PAPER_FEED = false;
       } else if (IS_MOVING && !MOVE_SENT) {
-        moveYAxis(Y_AXIS_STEPS);
-        Serial.print("Moved Y-axis ");
-        Serial.print(Y_AXIS_STEPS * MM_PER_STEP);
-        Serial.println("mm");
+        if(currentMode == COLOR){
+          moveYAxis(Y_AXIS_STEPS);
+          Serial.print("Moved Y-axis ");
+          Serial.print(Y_AXIS_STEPS * MM_PER_STEP);
+          Serial.println("mm");
+        }
+        if(currentMode == MONOCHROME){
+          moveYAxis(Y_AXIS_STEPS_M);
+          Serial.print("Moved Y-axis ");
+          Serial.print(Y_AXIS_STEPS_M * MM_PER_STEP);
+          Serial.println("mm");
+        }
         MOVE_SENT = true;
       }
     }
-    //This logic may not be needed. It would only be helpful if the paper moves back an forth across the sensor.
-    /*if(clicksSinceEdge << SMALL_ROLL_INS_THRESHOLD){ 
-      closePaperFeedSensor();
-      SEEKING_PAPER_FEED = false;
-    }*/
   }
 
   ClickInterval = millis() - ThisClick;
@@ -213,7 +210,8 @@ void homeYAxis() {
   
   // Move towards home until the limit switch is triggered
   while (digitalRead(limitSwitchPin) == LOW) {
-    moveYAxis(-1);  // Move one step at a time towards home
+    moveYAxis(-1); // Move one step at a time towards home
+    delay(1);  // Don't trip over your own toes
   }
   
   Serial.println("Limit switch triggered!");
