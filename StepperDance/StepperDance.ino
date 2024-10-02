@@ -6,8 +6,11 @@
 #define ButtonPin 4          
 #define dirPin 5             // Digital pin for Y stepper motor direction control
 #define stepPin 6            // Digital pin for Y stepper motor step control
+#define Z_limitSwitchPin 7   // Digital pin for Z limit switch input
 #define limitSwitchPin 8     // Digital pin for Y limit switch input
-#define ServoPin 9           
+#define ServoPin 9 
+#define Z_dirPin 10          // Digital pin for Z stepper motor direction control
+#define Z_stepPin 11         // Digital pin for Z stepper motor step control          
 
 // Constants
 const unsigned long BAUD_RATE = 115200;
@@ -15,10 +18,11 @@ const int Y_AXIS_STEPS = 34;  // Steps for 6.8mm movement for color cartridge
 const int Y_AXIS_STEPS_M = 72;  // Steps for 14.4mm movement for monochrome cartridge
 const float MM_PER_STEP = 0.2;  // Millimeters per step
 const unsigned long DEBOUNCE_DELAY = 300;  // Milliseconds
-const unsigned long SMOOTH_WINDOW = 100;  // Milliseconds
-const int HOMING_SPEED = 1000;  // Microseconds between steps (lower = faster)
+const unsigned long SMOOTH_WINDOW = 150;  // Milliseconds
+const int STEPPER_WRITE_DELAY = 1000;  // Microseconds between steps (lower = faster)
 const int SERVO_RANGE = 180;
 const int BACKOFF_STEPS = 450;  // Steps to accommodate reduced build area
+const int Z_BACKOFF_STEPS = 25; // Get off the switch a little
 const unsigned long HOMING_DIRECTION_CHANGE_DELAY = 50;  // Milliseconds
 const int SMALL_ROLL_INS_THRESHOLD = 10;  // New constant for small roll-ins
 volatile int clicksSinceEdge = 0;
@@ -42,6 +46,7 @@ volatile int EncoderClicks = 0;
 unsigned long ThisClick = 0;
 unsigned long ClickInterval = 0;
 volatile long currentYPosition = 0;
+volatile long currentZPosition = 0;
 volatile boolean EncoderClicksDecreased = false; // Track direction of paper feed mechanism to determine new page roll-in.
 boolean IS_MOVING = false;
 boolean MOVE_SENT = false;
@@ -59,6 +64,11 @@ void setup() {
   pinMode(stepPin, OUTPUT);
   pinMode(dirPin, OUTPUT);
   pinMode(limitSwitchPin, INPUT_PULLUP);
+
+  // Setup Z-axis stepper motor and limit switch
+  pinMode(Z_stepPin, OUTPUT);
+  pinMode(Z_dirPin, OUTPUT);
+  pinMode(Z_limitSwitchPin, INPUT_PULLUP);
 
   closePaperFeedSensor();
 
@@ -168,6 +178,9 @@ void handleSerialInput(char input) {
       Serial.println("Awaiting new print job, homing Y-axis...");
       homeYAxis();
       Serial.println("Y-axis homing completed for new print job.");
+      Serial.println("Homing Z-axis...");
+      homeZAxis();
+      Serial.println("Z-axis homing completed for new print job.");
       break;
     case 'm':
       currentMode = MONOCHROME;
@@ -179,6 +192,9 @@ void handleSerialInput(char input) {
       Serial.println("Awaiting new print job, homing Y-axis...");
       homeYAxis();
       Serial.println("Y-axis homing completed for new print job.");
+      Serial.println("Homing Z-axis...");
+      homeZAxis();
+      Serial.println("Z-axis homing completed for new print job.");
       break;
     case 'x':
       currentMode = IDLE;
@@ -229,9 +245,9 @@ void moveYAxis(int steps) {
     digitalWrite(dirPin, LOW);  // Set direction for positive steps
     for (int i = 0; i < steps; i++) {
       digitalWrite(stepPin, HIGH);
-      delayMicroseconds(HOMING_SPEED);
+      delayMicroseconds(STEPPER_WRITE_DELAY);
       digitalWrite(stepPin, LOW);
-      delayMicroseconds(HOMING_SPEED);
+      delayMicroseconds(STEPPER_WRITE_DELAY);
     }
     currentYPosition += steps;  // Update current Y position
   } else if (steps < 0) {
@@ -239,9 +255,9 @@ void moveYAxis(int steps) {
     steps = -steps;  // Convert negative steps to positive value
     for (int i = 0; i < steps; i++) {
       digitalWrite(stepPin, HIGH);
-      delayMicroseconds(HOMING_SPEED);
+      delayMicroseconds(STEPPER_WRITE_DELAY);
       digitalWrite(stepPin, LOW);
-      delayMicroseconds(HOMING_SPEED);
+      delayMicroseconds(STEPPER_WRITE_DELAY);
     }
     currentYPosition -= steps;  // Update current Y position
   } else {
@@ -249,5 +265,50 @@ void moveYAxis(int steps) {
   }
   Serial.print("currentYPosition: ");
   Serial.println(currentYPosition);
+}
+
+void homeZAxis() {
+  Serial.println("Starting Z-axis homing...");
   
+  // Move towards home until the limit switch is triggered
+  while (digitalRead(Z_limitSwitchPin) == LOW) {
+    moveZAxis(-1); // Move one step at a time towards home
+    delay(1);  // Don't trip over your own toes
+  }
+  
+  Serial.println("Z-limit switch triggered!");
+  
+  delay(HOMING_DIRECTION_CHANGE_DELAY);  // Short delay before changing direction
+  
+  moveYAxis(Z_BACKOFF_STEPS);  // Move up by Z_BACKOFF_STEPS
+  
+  currentZPosition = 0;  // Reset Z position to zero after homing
+  Serial.println("Z-homing complete!");
+}
+
+void moveZAxis(int steps) {
+  if (steps > 0) {
+    digitalWrite(Z_dirPin, HIGH);  // Set direction for positive steps
+    for (int i = 0; i < steps; i++) {
+      digitalWrite(Z_stepPin, HIGH);
+      delayMicroseconds(STEPPER_WRITE_DELAY);
+      digitalWrite(Z_stepPin, LOW);
+      delayMicroseconds(STEPPER_WRITE_DELAY);
+    }
+    currentZPosition += steps;  // Update current Z position
+  } else if (steps < 0) {
+    digitalWrite(Z_dirPin, LOW);  // Set direction for negative steps
+    steps = -steps;  // Convert negative steps to positive value
+    for (int i = 0; i < steps; i++) {
+      digitalWrite(Z_stepPin, HIGH);
+      delayMicroseconds(STEPPER_WRITE_DELAY);
+      digitalWrite(Z_stepPin, LOW);
+      delayMicroseconds(STEPPER_WRITE_DELAY);
+    }
+    currentZPosition -= steps;  // Update current Z position
+  } else {
+    return;  // If steps is zero, no movement is needed.
+  }
+  Serial.print("currentZPosition: ");
+  Serial.println(currentZPosition);
 }
