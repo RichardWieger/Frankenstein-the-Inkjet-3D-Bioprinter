@@ -22,7 +22,7 @@ const unsigned long SMOOTH_WINDOW = 150;  // Milliseconds
 const int STEPPER_WRITE_DELAY = 1000;  // Microseconds between steps (lower = faster)
 const int SERVO_RANGE = 180;
 const int BACKOFF_STEPS = 450;  // Steps to accommodate reduced build area
-const int Z_BACKOFF_STEPS = 25; // Get off the switch a little
+const int Z_BACKOFF_STEPS = 50; // Get off the switch a little
 const unsigned long HOMING_DIRECTION_CHANGE_DELAY = 50;  // Milliseconds
 const int SMALL_ROLL_INS_THRESHOLD = 10;  // New constant for small roll-ins
 volatile int clicksSinceEdge = 0;
@@ -224,10 +224,13 @@ void EncoderRotated() {
 void homeYAxis() {
   Serial.println("Starting Y-axis homing...");
   
+  digitalWrite(dirPin, HIGH);  // Set direction for negative steps
   // Move towards home until the limit switch is triggered
   while (digitalRead(limitSwitchPin) == LOW) {
-    moveYAxis(-1); // Move one step at a time towards home
-    delay(1);  // Don't trip over your own toes
+    digitalWrite(stepPin, HIGH);
+    delayMicroseconds(STEPPER_WRITE_DELAY/2);
+    digitalWrite(stepPin, LOW);
+    delayMicroseconds(STEPPER_WRITE_DELAY/2);
   }
   
   Serial.println("Limit switch triggered!");
@@ -269,18 +272,20 @@ void moveYAxis(int steps) {
 
 void homeZAxis() {
   Serial.println("Starting Z-axis homing...");
-  
+  digitalWrite(Z_dirPin, LOW);  // Set direction for negative steps
   // Move towards home until the limit switch is triggered
   while (digitalRead(Z_limitSwitchPin) == LOW) {
-    moveZAxis(-1); // Move one step at a time towards home
-    delay(1);  // Don't trip over your own toes
+    digitalWrite(Z_stepPin, HIGH);
+    delayMicroseconds(STEPPER_WRITE_DELAY);
+    digitalWrite(Z_stepPin, LOW);
+    delayMicroseconds(STEPPER_WRITE_DELAY);
   }
   
   Serial.println("Z-limit switch triggered!");
   
   delay(HOMING_DIRECTION_CHANGE_DELAY);  // Short delay before changing direction
   
-  moveYAxis(Z_BACKOFF_STEPS);  // Move up by Z_BACKOFF_STEPS
+  moveZAxis(Z_BACKOFF_STEPS);  // Move up by Z_BACKOFF_STEPS
   
   currentZPosition = 0;  // Reset Z position to zero after homing
   Serial.println("Z-homing complete!");
