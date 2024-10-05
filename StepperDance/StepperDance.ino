@@ -18,13 +18,13 @@ const int Y_AXIS_STEPS = 34;  // Steps for 6.8mm movement for color cartridge
 const int Y_AXIS_STEPS_M = 72;  // Steps for 14.4mm movement for monochrome cartridge
 const float MM_PER_STEP = 0.2;  // Millimeters per step
 const unsigned long DEBOUNCE_DELAY = 300;  // Milliseconds
-const unsigned long SMOOTH_WINDOW = 150;  // Milliseconds
+const unsigned long SMOOTH_WINDOW = 140;  // Milliseconds
 const int STEPPER_WRITE_DELAY = 1000;  // Microseconds between steps (lower = faster)
 const int SERVO_RANGE = 180;
 const int BACKOFF_STEPS = 450;  // Steps to accommodate reduced build area
 const int Z_BACKOFF_STEPS = 50; // Get off the switch a little
 const unsigned long HOMING_DIRECTION_CHANGE_DELAY = 50;  // Milliseconds
-const int SMALL_ROLL_INS_THRESHOLD = 10;  // New constant for small roll-ins
+const int SMALL_ROLL_INS_THRESHOLD = 4;  // New constant for small roll-ins
 volatile int clicksSinceEdge = 0;
 const int clicksPerPaper = 350;
 
@@ -51,6 +51,8 @@ volatile boolean EncoderClicksDecreased = false; // Track direction of paper fee
 boolean IS_MOVING = false;
 boolean MOVE_SENT = false;
 PrinterMode currentMode = IDLE;
+
+void moveYAxis(int steps, unsigned long delay = STEPPER_WRITE_DELAY);
 
 void setup() {
   SwitchServo.attach(ServoPin);  
@@ -133,7 +135,7 @@ void loop() {
           Serial.println("mm");
         }
         if(currentMode == MONOCHROME){
-          moveYAxis(Y_AXIS_STEPS_M);
+          moveYAxis(Y_AXIS_STEPS_M, STEPPER_WRITE_DELAY/1.4);
           Serial.print("Moved Y-axis ");
           Serial.print(Y_AXIS_STEPS_M * MM_PER_STEP);
           Serial.println("mm");
@@ -243,14 +245,14 @@ void homeYAxis() {
   Serial.println("Homing complete!");
 }
 
-void moveYAxis(int steps) {
+void moveYAxis(int steps, unsigned long delay = STEPPER_WRITE_DELAY) {
   if (steps > 0) {
     digitalWrite(dirPin, LOW);  // Set direction for positive steps
     for (int i = 0; i < steps; i++) {
       digitalWrite(stepPin, HIGH);
-      delayMicroseconds(STEPPER_WRITE_DELAY);
+      delayMicroseconds(delay);
       digitalWrite(stepPin, LOW);
-      delayMicroseconds(STEPPER_WRITE_DELAY);
+      delayMicroseconds(delay);
     }
     currentYPosition += steps;  // Update current Y position
   } else if (steps < 0) {
@@ -258,9 +260,9 @@ void moveYAxis(int steps) {
     steps = -steps;  // Convert negative steps to positive value
     for (int i = 0; i < steps; i++) {
       digitalWrite(stepPin, HIGH);
-      delayMicroseconds(STEPPER_WRITE_DELAY);
+      delayMicroseconds(delay);
       digitalWrite(stepPin, LOW);
-      delayMicroseconds(STEPPER_WRITE_DELAY);
+      delayMicroseconds(delay);
     }
     currentYPosition -= steps;  // Update current Y position
   } else {
